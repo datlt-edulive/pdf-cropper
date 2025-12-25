@@ -10,9 +10,10 @@ initPdfWorker();
 interface PdfViewerProps {
   file: File;
   onCropComplete: (crop: PixelCrop, image: HTMLCanvasElement) => void;
+  onPageChange?: (pageNum: number) => void;
 }
 
-export const PdfViewer: React.FC<PdfViewerProps> = ({ file, onCropComplete }) => {
+export const PdfViewer: React.FC<PdfViewerProps> = ({ file, onCropComplete, onPageChange }) => {
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [pageNum, setPageNum] = useState(1);
   const [pageCount, setPageCount] = useState(0);
@@ -20,6 +21,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ file, onCropComplete }) =>
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // Page Input State
+  const [inputPage, setInputPage] = useState("1");
+
   // Crop state
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
@@ -48,6 +52,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ file, onCropComplete }) =>
         setPdfDoc(doc);
         setPageCount(doc.numPages);
         setPageNum(1);
+        setInputPage("1");
+        if (onPageChange) onPageChange(1);
       } catch (err: any) {
         console.error("Error loading PDF", err);
         setError("Failed to load PDF. Please ensure it is a valid file.");
@@ -57,6 +63,12 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ file, onCropComplete }) =>
     };
     loadPdf();
   }, [file]);
+
+  // Sync Input Page when pageNum changes programmatically
+  useEffect(() => {
+    setInputPage(pageNum.toString());
+    if (onPageChange) onPageChange(pageNum);
+  }, [pageNum, onPageChange]);
 
   // Render Page
   const renderPage = useCallback(async () => {
@@ -102,6 +114,22 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ file, onCropComplete }) =>
     }
   };
 
+  const jumpToPage = () => {
+    const p = parseInt(inputPage, 10);
+    if (!isNaN(p) && p >= 1 && p <= pageCount) {
+      setPageNum(p);
+    } else {
+      // Reset input to current valid page if invalid
+      setInputPage(pageNum.toString());
+    }
+  };
+
+  const handlePageInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      jumpToPage();
+    }
+  };
+
   const handleCropConfirm = () => {
     if (completedCrop && canvasRef.current) {
       onCropComplete(completedCrop, canvasRef.current);
@@ -118,16 +146,34 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ file, onCropComplete }) =>
               onClick={() => changePage(-1)}
               disabled={pageNum <= 1}
               className="p-1 hover:bg-white rounded disabled:opacity-30 transition-colors"
+              title="Previous Page"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             </button>
-            <span className="text-sm font-medium text-slate-700 w-20 text-center">
-              Page {pageNum} / {pageCount}
-            </span>
+            
+            <div className="flex items-center space-x-1 mx-2">
+              <span className="text-sm font-medium text-slate-600">Page</span>
+              <input 
+                type="text" 
+                value={inputPage}
+                onChange={(e) => setInputPage(e.target.value)}
+                onKeyDown={handlePageInputKeyDown}
+                className="w-12 text-center text-sm border border-slate-300 rounded px-1 py-0.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              />
+              <span className="text-sm font-medium text-slate-600">/ {pageCount}</span>
+              <button 
+                 onClick={jumpToPage}
+                 className="ml-1 text-xs bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded text-slate-700"
+              >
+                Go
+              </button>
+            </div>
+
             <button 
               onClick={() => changePage(1)}
               disabled={pageNum >= pageCount}
               className="p-1 hover:bg-white rounded disabled:opacity-30 transition-colors"
+              title="Next Page"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
             </button>
@@ -151,9 +197,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ file, onCropComplete }) =>
       </div>
 
       {/* Canvas Container */}
-      <div className="flex-1 overflow-auto p-8 flex justify-center bg-slate-50 relative" ref={containerRef}>
+      <div className="flex-1 overflow-auto bg-slate-50 relative" ref={containerRef}>
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-20">
+          <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-20 sticky top-0 h-full">
             <div className="flex flex-col items-center">
                <svg className="animate-spin h-8 w-8 text-indigo-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -165,20 +211,24 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ file, onCropComplete }) =>
         )}
         
         {error && (
-          <div className="text-red-500 my-auto bg-red-50 p-4 rounded-lg border border-red-200">
-            {error}
+          <div className="flex items-center justify-center h-full">
+            <div className="text-red-500 bg-red-50 p-4 rounded-lg border border-red-200">
+              {error}
+            </div>
           </div>
         )}
 
-        <div className="relative shadow-xl border border-slate-300 bg-white">
-           <ReactCrop 
-            crop={crop} 
-            onChange={(c) => setCrop(c)}
-            onComplete={(c) => setCompletedCrop(c)}
-            className="block"
-           >
-            <canvas ref={canvasRef} className="block max-w-none" />
-          </ReactCrop>
+        <div className="min-w-full min-h-full flex items-center justify-center p-8 w-fit mx-auto">
+          <div className="relative shadow-xl border border-slate-300 bg-white">
+            <ReactCrop 
+              crop={crop} 
+              onChange={(c) => setCrop(c)}
+              onComplete={(c) => setCompletedCrop(c)}
+              className="block"
+            >
+              <canvas ref={canvasRef} className="block max-w-none" />
+            </ReactCrop>
+          </div>
         </div>
       </div>
     </div>

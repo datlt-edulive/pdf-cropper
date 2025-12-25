@@ -7,13 +7,16 @@ interface SidebarProps {
   previewBlob: Blob | null;
   onClear: () => void;
   width: number;
+  currentPage: number;
 }
 
 const URL_BASE = "https://thuvien.aiteacher.vn";
 
-export const Sidebar: React.FC<SidebarProps> = ({ previewUrl, previewBlob, onClear, width }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ previewUrl, previewBlob, onClear, width, currentPage }) => {
   const [imageName, setImageName] = useState('');
   const [uploadPath, setUploadPath] = useState('data-ai/images/class_1/toan/sgk/ketnoitrithuc/tap1/');
+  const [lessonNumber, setLessonNumber] = useState('');
+  const [notes, setNotes] = useState('');
   
   // Upload State
   const [isUploading, setIsUploading] = useState(false);
@@ -31,10 +34,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ previewUrl, previewBlob, onCle
     setFolderResult(null);
 
     const fullUrl = `${URL_BASE}/${uploadPath}`;
+    
+    // Ensure extension for the log
+    let finalFileName = imageName;
+    if (!finalFileName.toLowerCase().endsWith('.png')) {
+        finalFileName += '.png';
+    }
 
     try {
       const responseText = await uploadImageToBackend(previewBlob, imageName, fullUrl);
       setUploadResult({ success: true, text: responseText || "Upload Successful!" });
+      
+      // Add log entry on success
+      const logEntry = `${URL_BASE}/${uploadPath}${finalFileName} - Page: ${currentPage} - Lesson: ${lessonNumber}`;
+      setNotes(prev => prev ? `${prev}\n${logEntry}` : logEntry);
+
     } catch (err: any) {
       setUploadResult({ success: false, text: err.message || "Upload Failed" });
     } finally {
@@ -55,7 +69,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ previewUrl, previewBlob, onCle
       const responseText = await createFolder(fullUrl);
       setFolderResult({ success: true, text: responseText || "Folder Created Successfully!" });
     } catch (err: any) {
-      setFolderResult({ success: false, text: err.message || "Folder Creation Failed" });
+      // Check for 409 Conflict error
+      if (err.message && err.message.includes('409')) {
+        setFolderResult({ success: true, text: "Folder already exists." });
+      } else {
+        setFolderResult({ success: false, text: err.message || "Folder Creation Failed" });
+      }
     } finally {
       setIsCreatingFolder(false);
     }
@@ -69,6 +88,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ previewUrl, previewBlob, onCle
       >
         <svg className="w-16 h-16 mb-4 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
         <p className="text-sm">Select an area on the PDF and click "Capture Selection" to preview it here.</p>
+        
+        {/* Always show Notes even when empty to copy/paste if needed */}
+        <div className="w-full mt-auto pt-6 text-left">
+           <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Upload Log / Notes</label>
+           <textarea 
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full h-32 px-3 py-2 border border-slate-300 rounded-md text-xs font-mono resize-y"
+              placeholder="Upload history will appear here..."
+           />
+        </div>
       </div>
     );
   }
@@ -98,6 +128,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ previewUrl, previewBlob, onCle
               placeholder="e.g. page_0001_box_001"
               className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             />
+          </div>
+          
+          <div className="flex space-x-2">
+            <div className="flex-1">
+               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Page</label>
+               <input 
+                  type="text" 
+                  value={currentPage}
+                  readOnly
+                  className="w-full px-3 py-2 border border-slate-200 bg-slate-50 rounded-md text-slate-500 text-sm cursor-not-allowed"
+                />
+            </div>
+            <div className="flex-1">
+               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Lesson</label>
+               <input 
+                  type="text" 
+                  value={lessonNumber}
+                  onChange={(e) => setLessonNumber(e.target.value)}
+                  placeholder="e.g. 5"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                />
+            </div>
           </div>
 
           <div>
@@ -138,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ previewUrl, previewBlob, onCle
             
             {folderResult && (
               <div className={`mt-2 p-2 rounded text-xs ${folderResult.success ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-                <p className="font-bold">{folderResult.success ? 'Folder Created' : 'Folder Error'}</p>
+                <p className="font-bold">{folderResult.success ? (folderResult.text.includes("exists") ? "Info" : "Folder Created") : 'Folder Error'}</p>
                 <p className="mt-0.5 break-all font-mono opacity-80">{folderResult.text}</p>
               </div>
             )}
@@ -161,6 +213,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ previewUrl, previewBlob, onCle
               <p className="text-xs mt-1 break-all font-mono">{uploadResult.text}</p>
             </div>
           )}
+
+          <div className="pt-2">
+             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Upload Log / Notes</label>
+             <textarea 
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full h-32 px-3 py-2 border border-slate-300 rounded-md text-xs font-mono resize-y"
+                placeholder="Upload history will appear here..."
+             />
+          </div>
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ const App: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   
   // Resizing State
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -20,6 +21,7 @@ const App: React.FC = () => {
         setSelectedFile(file);
         setPreviewUrl(null);
         setPreviewBlob(null);
+        setCurrentPage(1);
       } else {
         alert("Please upload a valid PDF file.");
       }
@@ -129,6 +131,7 @@ const App: React.FC = () => {
             <PdfViewer 
               file={selectedFile} 
               onCropComplete={handleCropComplete} 
+              onPageChange={setCurrentPage}
             />
           )}
         </main>
@@ -145,6 +148,7 @@ const App: React.FC = () => {
           previewUrl={previewUrl} 
           previewBlob={previewBlob} 
           onClear={clearPreview}
+          currentPage={currentPage}
         />
       </div>
     </div>
